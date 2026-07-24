@@ -25,12 +25,22 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
-      - name: Install Capacitor & Build
+      - name: Setup Project & Install Capacitor
         run: |
-          npm install -g @capacitor/core @capacitor/cli
+          # ساخت پروژه npm
+          npm init -y
+          
+          # نصب لوکال Capacitor + Android
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          
+          # ساخت پوشه www
           mkdir -p www
           echo '<html><body style="background:#0f0818"></body></html>' > www/index.html
+          
+          # کانفیگ Capacitor
           npx cap init "فایلو آپلود" com.filoupload.app --web-dir www
+          
+          # اضافه کردن اندروید
           npx cap add android
           
       - name: Build APK
