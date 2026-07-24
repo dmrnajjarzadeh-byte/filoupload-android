@@ -149,19 +149,25 @@ jobs:
           import android.content.ClipData;
           import android.content.Intent;
           import android.content.pm.PackageManager;
+          import android.graphics.Bitmap;
           import android.net.Uri;
           import android.os.Build;
           import android.os.Bundle;
           import android.os.Environment;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.view.View;
           import android.view.WindowManager;
           import android.webkit.CookieManager;
           import android.webkit.DownloadListener;
           import android.webkit.ValueCallback;
           import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceError;
           import android.webkit.WebResourceRequest;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+          import android.widget.ProgressBar;
           import android.widget.Toast;
           import androidx.activity.result.ActivityResultLauncher;
           import androidx.activity.result.contract.ActivityResultContracts;
@@ -173,9 +179,11 @@ jobs:
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
               private SwipeRefreshLayout swipeRefresh;
+              private ProgressBar progressBar;
               private ValueCallback<Uri[]> filePathCallback;
               private static final String SITE_URL = "https://filoupload.ir/";
               private static final int REQUEST_PERMISSIONS = 1001;
+              private boolean pageLoaded = false;
           
               private final ActivityResultLauncher<Intent> fileChooserLauncher = registerForActivityResult(
                       new ActivityResultContracts.StartActivityForResult(),
@@ -237,10 +245,10 @@ jobs:
               private void initViews() {
                   webView = findViewById(R.id.webView);
                   swipeRefresh = findViewById(R.id.swipeRefresh);
+                  progressBar = findViewById(R.id.progressBar);
                   swipeRefresh.setColorSchemeResources(android.R.color.holo_purple, android.R.color.holo_blue_light, android.R.color.holo_green_light);
                   swipeRefresh.setOnRefreshListener(() -> {
                       webView.reload();
-                      swipeRefresh.setRefreshing(false);
                   });
               }
           
@@ -255,18 +263,56 @@ jobs:
                   settings.setAllowContentAccess(true);
                   settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
                   settings.setMediaPlaybackRequiresUserGesture(false);
+                  settings.setLoadsImagesAutomatically(true);
+                  settings.setJavaScriptCanOpenWindowsAutomatically(true);
+                  settings.setSupportMultipleWindows(true);
+                  settings.setUseWideViewPort(true);
+                  settings.setLoadWithOverviewMode(true);
+                  settings.setBuiltInZoomControls(false);
+                  settings.setDisplayZoomControls(false);
+                  
                   String originalUA = settings.getUserAgentString();
-                  settings.setUserAgentString(originalUA + " FilouploadAndroid/1.0");
+                  settings.setUserAgentString(originalUA + " FilouploadAndroid/1.0 Mobile");
+                  
                   CookieManager cookieManager = CookieManager.getInstance();
                   cookieManager.setAcceptCookie(true);
                   cookieManager.setAcceptThirdPartyCookies(webView, true);
           
-                  webView.setBackgroundColor(0xFF0f0818);
+                  webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                  webView.setBackgroundColor(0x00000000);
+          
                   webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                          super.onPageStarted(view, url, favicon);
+                          progressBar.setVisibility(View.VISIBLE);
+                          pageLoaded = false;
+                      }
+          
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          progressBar.setVisibility(View.GONE);
+                          swipeRefresh.setRefreshing(false);
+                          pageLoaded = true;
+                      }
+          
+                      @Override
+                      public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                          super.onReceivedError(view, request, error);
+                          if (request.isForMainFrame()) {
+                              Toast.makeText(MainActivity.this, "خطا در لود صفحه: " + error.getDescription(), Toast.LENGTH_LONG).show();
+                          }
+                      }
+          
                       @Override
                       public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                           String url = request.getUrl().toString();
-                          if (url.startsWith("https://filoupload.ir") || url.startsWith("https://github.com") || url.startsWith("https://api.github.com") || url.contains("mediaad.org")) {
+                          if (url.startsWith("https://filoupload.ir") || 
+                              url.startsWith("https://github.com") || 
+                              url.startsWith("https://api.github.com") ||
+                              url.contains("mediaad.org") ||
+                              url.startsWith("https://s1.mediaad.org")) {
                               return false;
                           }
                           Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
@@ -276,6 +322,11 @@ jobs:
                   });
           
                   webView.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onProgressChanged(WebView view, int newProgress) {
+                          progressBar.setProgress(newProgress);
+                      }
+          
                       @Override
                       public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                           if (MainActivity.this.filePathCallback != null) {
@@ -311,6 +362,15 @@ jobs:
                   });
           
                   webView.loadUrl(SITE_URL);
+          
+                  // اگه ۸ ثانیه لود نشد، رفرش خودکار
+                  new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                      if (!pageLoaded) {
+                          Toast.makeText(MainActivity.this, "صفحه دیر لود می‌شه... دوباره تلاش می‌کنم", Toast.LENGTH_SHORT).show();
+                          webView.stopLoading();
+                          webView.loadUrl(SITE_URL);
+                      }
+                  }, 8000);
               }
           
               @Override
@@ -341,15 +401,50 @@ jobs:
               xmlns:android="http://schemas.android.com/apk/res/android"
               android:id="@+id/swipeRefresh"
               android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:background="#0f0818">
+              android:layout_height="match_parent">
           
-              <WebView
-                  android:id="@+id/webView"
+              <FrameLayout
                   android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:background="#0f0818" />
+                  android:layout_height="match_parent">
+          
+                  <WebView
+                      android:id="@+id/webView"
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent" />
+          
+                  <ProgressBar
+                      android:id="@+id/progressBar"
+                      style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                      android:layout_width="match_parent"
+                      android:layout_height="3dp"
+                      android:layout_gravity="top"
+                      android:progressDrawable="@drawable/progress_gradient"
+                      android:visibility="visible" />
+          
+              </FrameLayout>
           </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+          EOF
+          
+          mkdir -p myapp/app/src/main/res/drawable
+          cat > myapp/app/src/main/res/drawable/progress_gradient.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:id="@android:id/background">
+                  <shape>
+                      <solid android:color="@android:color/transparent" />
+                  </shape>
+              </item>
+              <item android:id="@android:id/progress">
+                  <clip>
+                      <shape>
+                          <gradient
+                              android:startColor="#667eea"
+                              android:endColor="#38ef7d"
+                              android:angle="0" />
+                      </shape>
+                  </clip>
+              </item>
+          </layer-list>
           EOF
           
           cat > myapp/app/src/main/res/values/strings.xml << 'EOF'
