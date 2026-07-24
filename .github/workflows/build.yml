@@ -27,16 +27,33 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
-      - name: Create Project
+      - name: Create Capacitor Project
         run: |
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android
           mkdir -p www
           echo '<html><body style="background:#0f0818"></body></html>' > www/index.html
-          npx cap init "فایلو آپلود" com.filoupload.app --web-dir www
+          
+          # ساخت کانفیگ با آدرس سایت
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.filoupload.app",
+            "appName": "فایلو آپلود",
+            "webDir": "www",
+            "server": {
+              "url": "https://filoupload.ir",
+              "cleartext": false,
+              "allowNavigation": ["*.filoupload.ir", "github.com", "*.github.com", "s1.mediaad.org", "*.mediaad.org"]
+            },
+            "android": {
+              "allowMixedContent": false
+            }
+          }
+          EOF
+          
           npx cap add android
           
-      - name: Fix Dependencies
+      - name: Fix Kotlin Conflict
         run: |
           printf "\nconfigurations.all {\n    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'\n    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'\n}\n" >> android/app/build.gradle
           
