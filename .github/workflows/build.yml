@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Install Capacitor & Build
+        run: |
+          npm install -g @capacitor/core @capacitor/cli
+          mkdir -p www
+          echo '<html><body style="background:#0f0818"></body></html>' > www/index.html
+          npx cap init "فایلو آپلود" com.filoupload.app --web-dir www
+          npx cap add android
+          
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: filoupload-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
