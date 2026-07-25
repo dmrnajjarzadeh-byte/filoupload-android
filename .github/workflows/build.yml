@@ -48,17 +48,33 @@ jobs:
             convert -size ${size}x${size} xc:#667eea -pointsize $((size/2)) -fill white -gravity center -annotate +0+0 "F" res/icon/android/icon-${size}.png
           done
           
-      - name: Build Release
+      - name: Build APK
         run: |
           cd app
-          cordova build android --release
+          cordova build android
           
-      - name: Sign APK
+      - name: Find and Sign APK
         run: |
           cd app
+          
+          # پیدا کردن APK ساخته شده
+          APK_PATH=$(find platforms/android -name "*.apk" | head -1)
+          echo "Found APK: $APK_PATH"
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK found!"
+            exit 1
+          fi
+          
+          # ساخت Keystore
           keytool -genkey -v -keystore my.keystore -alias key -keyalg RSA -keysize 2048 -validity 9125 -dname "CN=Filoupload" -storepass 123456 -keypass 123456
+          
+          # امضا
           apksigner=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner | sort -V | tail -1)
-          $apksigner sign --ks my.keystore --ks-pass pass:123456 --key-pass pass:123456 --in platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk --out filoupload.apk
+          $apksigner sign --ks my.keystore --ks-pass pass:123456 --key-pass pass:123456 --in "$APK_PATH" --out filoupload.apk
+          
+          echo "APK signed successfully!"
+          ls -la filoupload.apk
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
