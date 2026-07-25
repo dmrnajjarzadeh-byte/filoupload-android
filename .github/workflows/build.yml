@@ -27,27 +27,24 @@ jobs:
         with:
           node-version: '20'
           
-      - name: Install Cordova & Build
+      - name: Install Cordova & Build APK
         run: |
           npm install -g cordova
           
-          # ساخت پروژه Cordova
+          # ساخت پروژه
           cordova create filoupload-app com.filoupload.app "فایلو آپلود"
           cd filoupload-app
           
-          # اضافه کردن پلتفرم اندروید
+          # اضافه کردن اندروید
           cordova platform add android
           
-          # تنظیم صفحه شروع = سایتت
+          # تغییر صفحه شروع به سایتت
           sed -i 's|<content src="index.html" />|<content src="https://filoupload.ir" />|' config.xml
           
-          # اضافه کردن دسترسی‌ها
-          cordova plugin add cordova-plugin-whitelist
+          # اضافه کردن دسترسی‌های لازم توی config.xml
+          sed -i 's|</widget>|  <allow-navigation href="https://filoupload.ir/*" />\n  <allow-navigation href="https://github.com/*" />\n  <allow-navigation href="https://*.mediaad.org/*" />\n  <allow-navigation href="https://s1.mediaad.org/*" />\n  <access origin="*" />\n  <preference name="AndroidInsecureFileModeEnabled" value="false" />\n</widget>|' config.xml
           
-          # تنظیمات امنیتی توی config.xml
-          sed -i 's|</widget>|  <allow-navigation href="https://filoupload.ir/*" />\n  <allow-navigation href="https://github.com/*" />\n  <allow-navigation href="https://*.mediaad.org/*" />\n  <access origin="*" />\n  <preference name="AndroidInsecureFileModeEnabled" value="false" />\n</widget>|' config.xml
-          
-          # Build APK
+          # Build
           cordova build android
           
       - name: Upload APK
