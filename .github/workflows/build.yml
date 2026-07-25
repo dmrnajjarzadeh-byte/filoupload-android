@@ -1,0 +1,125 @@
+name: Build Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+        
+      - name: Create Cordova Project
+        run: |
+          npm install -g cordova
+          cordova create filoupload-app com.filoupload.app "فایلو آپلود"
+          cd filoupload-app
+          
+          # کانفیگ کامل
+          cat > config.xml << 'XMLEOF'
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.filoupload.app" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>فایلو آپلود</name>
+    <description>آپلود فایل و دریافت لینک مستقیم</description>
+    <author email="admin@filoupload.ir" href="https://filoupload.ir">Filoupload Team</author>
+    <content src="https://filoupload.ir" />
+    <allow-navigation href="https://filoupload.ir/*" />
+    <allow-navigation href="https://github.com/*" />
+    <allow-navigation href="https://*.mediaad.org/*" />
+    <allow-navigation href="https://s1.mediaad.org/*" />
+    <access origin="*" />
+    <preference name="AndroidInsecureFileModeEnabled" value="false" />
+    <preference name="BackgroundColor" value="0xFF0f0818" />
+    <preference name="StatusBarBackgroundColor" value="#0f0818" />
+    <platform name="android">
+        <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/icon.png" />
+        <preference name="AndroidWindowSplashScreenIconBackgroundColor" value="#0f0818" />
+    </platform>
+</widget>
+XMLEOF
+          
+          cordova platform add android
+          
+      - name: Generate App Icon
+        run: |
+          cd filoupload-app
+          mkdir -p res
+          
+          # ساخت آیکون SVG با حرف F (رنگ برند #667eea)
+          cat > res/icon.svg << 'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="128" fill="#667eea"/>
+  <text x="256" y="360" font-size="300" fill="white" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold">F</text>
+</svg>
+EOF
+          
+          # تبدیل به PNG
+          convert res/icon.svg res/icon.png
+          
+          # سایزبندی برای اندروید
+          mkdir -p platforms/android/app/src/main/res/mipmap-mdpi
+          mkdir -p platforms/android/app/src/main/res/mipmap-hdpi
+          mkdir -p platforms/android/app/src/main/res/mipmap-xhdpi
+          mkdir -p platforms/android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p platforms/android/app/src/main/res/mipmap-xxxhdpi
+          
+          convert res/icon.png -resize 48x48 platforms/android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert res/icon.png -resize 72x72 platforms/android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert res/icon.png -resize 96x96 platforms/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert res/icon.png -resize 144x144 platforms/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert res/icon.png -resize 192x192 platforms/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          
+          # آیکون round (دایره‌ای)
+          for dir in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp platforms/android/app/src/main/res/mipmap-${dir}/ic_launcher.png platforms/android/app/src/main/res/mipmap-${dir}/ic_launcher_round.png
+          done
+          
+      - name: Generate Keystore
+        run: |
+          cd filoupload-app
+          keytool -genkey -v -keystore filoupload.keystore -alias filoupload -keyalg RSA -keysize 2048 -validity 9125 -dname "CN=Filoupload, O=Filoupload, C=IR" -storepass filoupload123 -keypass filoupload123
+          
+      - name: Build Release APK
+        run: |
+          cd filoupload-app
+          cordova build android --release
+          
+      - name: Sign APK
+        run: |
+          cd filoupload-app
+          APKSIGNER=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner | sort -V | tail -1)
+          echo "Using: $APKSIGNER"
+          
+          UNSIGNED="platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          SIGNED="platforms/android/app/build/outputs/apk/release/app-release-signed.apk"
+          
+          $APKSIGNER sign --ks filoupload.keystore --ks-pass pass:filoupload123 --key-pass pass:filoupload123 --in "$UNSIGNED" --out "$SIGNED"
+          $APKSIGNER verify "$SIGNED"
+          echo "✅ Signed APK ready!"
+          
+      - name: Upload Signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: filoupload-release-apk
+          path: filoupload-app/platforms/android/app/build/outputs/apk/release/app-release-signed.apk
